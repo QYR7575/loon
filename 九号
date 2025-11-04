@@ -1,15 +1,4 @@
 
-/*
-九号 APP 自动签到脚本
-每天早上 8:00 自动执行
-显示签到成功 + 连续签到天数
-*/
-
-const url = "https://cn-cbu-gateway.ninebot.com/portal/api/user-sign/v2/sign";
-const token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjQ5MDgxODE0MDczNjEwMjQwIiwiYXVkaWVuY2UiOiJtb2JpbGUiLCJ1c2VyX25hbWUiOiJv57uI56m25piv5oiPbyIsImNsaWVudF9pZCI6ImFwcF9jbGllbnRfaWRfdmVoaWNsZSIsInJlZ19kYXRlIjoxNzE3ODQ1OTExLCJhdWQiOlsiaW90LXdlYmFwcCJdLCJhcmVhQ29kZSI6Ijg2IiwicGhvbmUiOiIxNzYyMTUwODY4NSIsInNjb3BlIjpbInJlYWQiXSwiZXhwIjoxNzYyNzI1NjI2LCJyZWdpb24iOiJiaiIsImp0aSI6IlY1eVRYQTNLNnFELVBxd0M3VlQwbUtTMVp0YyIsImVtYWlsIjoicWluZ2Fvc2hhbmdAaWNsb3VkLmNvbSJ9.hfoeqi9z1fCLiW7JujZmkYBeVpo-tewraz1CC2sXH9LEoU4e_fD9vO2WmqEDR4edsjRJzoZdfAoohqFeAJFxN0jBaHttYlVYuwdqtJ8DosyewmAtTiRDmQVaXJiAFCQ57ei-dUnu2N1-Q3Ua1Hl79wn5ZWylQDV0kw0V_aphOto";
-
-const headers = {
-  "Host": "cn-cbu-gateway.ninebot.com",
   "Connection": "keep-alive",
   "Content-Type": "application/json",
   "Accept": "application/json, text/plain, */*",
@@ -17,9 +6,7 @@ const headers = {
   "platform": "h5",
   "language": "zh",
   "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Segway v6 C",
-  "Origin": "https://h5-bj.ninebot.com",
-  "Referer": "https://h5-bj.ninebot.com/",
-  "device_id": "06965B02-DE89-45AB-9116-9B69923BF54C",
+  "Origin": "https://h5-bj.ninebot.com"9B69923BF54C",
   "sys_language": "zh-CN",
 };
 
