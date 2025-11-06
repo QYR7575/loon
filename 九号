@@ -1,33 +1,200 @@
+/*
+📱 九号智能电动车 - 单账号签到脚本
+适用于 Loon / Surge / Quantumult X
 
-  "Connection": "keep-alive",
-  "Content-Type": "application/json",
-  "Accept": "application/json, text/plain, */*",
-  "Authorization": token,
-  "platform": "h5",
-  "language": "zh",
-  "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Segway v6 C",
-  "Origin": "https://h5-bj.ninebot.com"9B69923BF54C",
-  "sys_language": "zh-CN",
-};
+=====================
+👤 作者：❥﹒﹏非我不可
+⌛️ 更新日期：2015/11/5
+🚧 后续版本将增加显示“惊喜盲盒赚不停”任务列表
+Telegram 群：https://t.me/WorKingCopyAPP
+=====================
 
-const body = JSON.stringify({ signChannel: "app" });
+*/
 
 (async () => {
-  try {
-    const req = { url, method: "POST", headers, body };
-    const resp = await $httpClient.post(req);
-    const data = JSON.parse(resp.body);
-    let msg = "";
-    if (data.code === 0 && data.data) {
-      const dayCount = data.data.continuousSignDays || 0;
-      msg = `今日签到成功，连续签到 ${dayCount} 天`;
-      $notification.post("✅ 九号签到成功", "", msg);
+  // 设置常量
+  const STORAGE_KEY = 'NINEBOT_ACCOUNT';   // 存储账户信息的键
+  const SIGN_PATH = 'https://cn-cbu-gateway.ninebot.com/portal/api/user-sign/v2/sign';  // 签到接口 URL
+  const REQUEST_TIMEOUT = 12000;  // 请求超时时间 (单位：毫秒)
+  const MAX_RETRY = 2;  // 最大重试次数
+
+  // 九号 mzmax 车型背景图片URL（可以替换为实际图片链接）
+  const CAR_IMAGE_URL = 'https://example.com/ninebot_mzmax_background.jpg';
+
+  // 通知函数：发送签到成功/失败通知
+  function notify(title, sub, body, imageUrl) {
+    if ($notification && $notification.post) {
+      // 使用背景图片发送通知
+      $notification.post(title, sub || '', body || '', '', imageUrl || '');
     } else {
-      msg = data.msg || JSON.stringify(data);
-      $notification.post("⚠️ 九号签到失败", "", msg);
+      // 若通知无法发送，则在控制台输出
+      console.log(`${title}\n${sub || ''}\n${body || ''}`);
     }
-  } catch (err) {
-    $notification.post("❌ 九号签到出错", "", err.toString());
   }
+
+  // 安全解析JSON字符串
+  function safeParse(s) {
+    try {
+      return JSON.parse(s);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // 构建请求头
+  function buildHeaders(acc) {
+    return {
+      "Host": "cn-cbu-gateway.ninebot.com",
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/plain, */*",
+      "Authorization": acc.authorization || '',
+      "Sec-Fetch-Site": "same-site",
+      "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "platform": "h5",
+      "Sec-Fetch-Mode": "cors",
+      "Origin": "https://h5-bj.ninebot.com",
+      "language": "zh",
+      "User-Agent": acc.userAgent || '',
+      "Referer": "https://h5-bj.ninebot.com/",
+      "device_id": acc.deviceId || '',
+      "sys_language": "zh-CN"
+    };
+  }
+
+  // 执行 HTTP POST 请求
+  function httpPost(opts) {
+    return new Promise(resolve => {
+      $httpClient.post({...opts, timeout: REQUEST_TIMEOUT}, (err, resp, data) => resolve({ err, resp, data }));
+    });
+  }
+
+  // 读取存储中的账户信息
+  let raw = $persistentStore.read(STORAGE_KEY) || '';
+  let account = null;
+  if (raw) {
+    try { account = JSON.parse(raw); } catch (e) { account = null; }
+  }
+
+  // 如果没有存储账户信息，使用示例账户（用户需自行替换为自己的信息）
+  if (!account) {
+    account = {
+      name: '九号 mzmax',  // 设备名称
+      authorization: 'YOUR_AUTHORIZATION_TOKEN',  // 替换为自己的Authorization token
+      deviceId: 'YOUR_DEVICE_ID',  // 替换为自己的设备ID
+      userAgent: 'YOUR_USER_AGENT'  // 替换为自己的User-Agent
+    };
+  }
+
+  let name = account.name || account.deviceId || 'unknown';  // 设备名称
+  let headers = buildHeaders(account);  // 构建请求头
+  let body = JSON.stringify({ deviceId: account.deviceId || '' });  // 请求体
+
+  let attempt = 0;
+  let ok = false;
+  let lastRaw = '';
+  let statusLabel = '';  // 用于显示签到状态
+  let bodyNotify = '';  // 通知内容
+  let continuous = 0;   // 初始化连续签到天数
+
+  // 读取存储中的历史连续签到天数
+  let storedContinuousDays = parseInt($persistentStore.read("continuous_days") || "0");
+
+  // 强制检查存储的连续签到天数
+  console.log("读取存储的连续签到天数:", storedContinuousDays);
+
+  // 如果没有存储初始值，手动设置为一个默认值
+  if (storedContinuousDays === 0) {
+    storedContinuousDays = 401;  // 设置为手动修改的历史天数
+    let result = $persistentStore.write(storedContinuousDays.toString(), "continuous_days");
+    console.log("手动设置连续签到天数为 401，写入结果：", result);  // 输出写入是否成功
+  }
+
+  // 输出每次请求的 URL 和请求体内容
+  console.log("请求 URL:", SIGN_PATH);
+  console.log("请求体:", body);
+
+  // 执行签到请求
+  while (attempt <= MAX_RETRY && !ok) {
+    attempt++;
+    let res = await httpPost({ url: SIGN_PATH, headers, body });
+    let err = res.err;
+    let data = res.data;
+    lastRaw = data ? String(data) : (err ? String(err) : '');
+
+    // 输出响应状态码和原始返回数据
+    console.log(`第 ${attempt} 次 响应状态:`, res.resp && res.resp.status);
+    console.log(`第 ${attempt} 次 原始返回:`, data);
+
+    if (err) {
+      // 若请求出错，稍等再重试
+      await new Promise(r => setTimeout(r, 600 * attempt));
+      continue;
+    }
+
+    let parsed = safeParse(data);
+    let code = parsed && (parsed.code || parsed.errcode || parsed.status);
+    let msg = parsed && (parsed.msg || parsed.message) || '';
+    let treatAsSuccess = false;
+
+    if (parsed) {
+      // 判断是否为“已签到”状态
+      if (parsed.code === 0 || parsed.errcode === 0 || parsed.success === true || /success/i.test(msg)) treatAsSuccess = true;
+      if (parsed.code === 540004 || /已签到/i.test(msg)) treatAsSuccess = true;
+    }
+
+    if (treatAsSuccess) {
+      ok = true;
+      let payload = parsed.data || parsed.result || parsed.payload || parsed.signInfo || parsed || {};
+
+      // 提取连续签到天数
+      continuous = payload.continuousDays || payload.continuous_day || payload.consecutiveDays || payload.streak || payload.days || payload.continueDay || payload.continuous;
+      continuous = continuous || 0;
+
+      // 累加上次的连续签到天数
+      continuous += storedContinuousDays;
+
+      // 更新存储的连续签到天数
+      let result = $persistentStore.write(continuous.toString(), "continuous_days");
+      console.log("更新连续签到天数写入结果：", result);  // 输出写入是否成功
+      console.log("当前连续签到天数:", continuous);
+
+      // 提取奖励信息
+      let reward = payload.reward || payload.rewards || payload.points || payload.prize || payload.credit || payload.amount || payload.value;
+
+      // 判断是否为“已签到”状态
+      if (parsed.code === 540004 || /已签到/i.test(msg)) {
+        // 已签到，不重复发送通知
+        statusLabel = '已签到(今日已签)';
+        bodyNotify = `${statusLabel}\n奖励：${reward || '无'}${continuous ? `\n连续签到：${continuous} 天` : ''}`;
+      } else {
+        // 新签到，发送通知
+        statusLabel = '新签到(成功)';
+        bodyNotify = `${statusLabel}\n奖励：${reward || '无'}${continuous ? `\n连续签到：${continuous} 天` : ''}`;
+      }
+
+      // 发送通知，背景为车型图片
+      notify(`九号签到 - ${name}`, statusLabel, bodyNotify, CAR_IMAGE_URL);
+      break;
+    } else {
+      // 出现错误，打印错误并返回
+      if (code === 1) {
+        await new Promise(r => setTimeout(r, 800 * attempt));
+        continue;
+      } else {
+        let errorDetails = `签到失败（code:${code || '未知'}）\n提示：${msg}`;
+        notify(`九号签到 - ${name}`, '失败', errorDetails, CAR_IMAGE_URL);
+        break;
+      }
+    }
+  }
+
+  // 如果多次尝试仍然失败，输出最终错误
+  if (!ok) {
+    let finalError = `尝试 ${attempt} 次，返回：${lastRaw}\n建议：检查 token 是否过期或更新 Authorization。`;
+    notify(`九号签到 - ${name}`, '失败（最终）', finalError, CAR_IMAGE_URL);
+  }
+
   $done();
 })();
